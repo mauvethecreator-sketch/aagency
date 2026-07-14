@@ -790,7 +790,7 @@ input[type="time"].task-input::-webkit-calendar-picker-indicator:hover { opacity
 }
 .tdash-card:active { transform: scale(0.97); }
 .tdash-card.tdash-over { border-color: #ff444440; background: #ff444410; }
-.tdash-card.tdash-today { border-color: #FF4D2E40; background: #FF4D2E10; }
+.tdash-card.tdash-today { border-color: #00e67640; background: #00e67610; }
 .tdash-card.tdash-soon { border-color: #ffab0040; background: #ffab0010; }
 .tdash-num {
   font-family: 'Space Grotesk', sans-serif;
@@ -800,7 +800,7 @@ input[type="time"].task-input::-webkit-calendar-picker-indicator:hover { opacity
   margin-bottom: 6px;
 }
 .tdash-over .tdash-num { color: var(--red); }
-.tdash-today .tdash-num { color: var(--orange); }
+.tdash-today .tdash-num { color: var(--green); }
 .tdash-soon .tdash-num { color: var(--amber); }
 .tdash-label {
   font-size: 10px;
@@ -862,7 +862,7 @@ input[type="time"].task-input::-webkit-calendar-picker-indicator:hover { opacity
   font-family: 'IBM Plex Mono', monospace;
 }
 .tdash-badge-over { background: #ff444418; color: var(--red); }
-.tdash-badge-today { background: #FF4D2E18; color: var(--orange); }
+.tdash-badge-today { background: #00e67618; color: var(--green); }
 .tdash-badge-soon { background: #ffab0018; color: var(--amber); }
 .tdash-empty {
   padding: 22px 14px;
@@ -1685,7 +1685,7 @@ input[type="time"].task-input::-webkit-calendar-picker-indicator:hover { opacity
    ════════════════════════════════════════════ */
 @media (max-width: 480px) {
   /* Page header smaller on mobile */
-  .page-header { padding: 44px 16px 14px; }
+  .page-header { padding: max(44px, calc(env(safe-area-inset-top) + 12px)) 16px 14px; }
   .page-title { font-size: 28px; }
   .page-eyebrow { font-size: 8px; }
 
@@ -1753,7 +1753,7 @@ input[type="time"].task-input::-webkit-calendar-picker-indicator:hover { opacity
 
 /* Landscape mobile */
 @media (max-height: 500px) and (orientation: landscape) {
-  .page-header { padding: 36px 16px 10px; }
+  .page-header { padding: max(36px, calc(env(safe-area-inset-top) + 8px)) 16px 10px; }
   .page-title { font-size: 22px; }
   .tracker-board { min-height: calc(100vh - 120px); }
 }
@@ -1796,7 +1796,7 @@ input[type="time"].task-input::-webkit-calendar-picker-indicator:hover { opacity
 #fin-root .mc .mh{font-size:11px;color:var(--text3);margin-top:4px}
 #fin-root .pbar{height:3px;background:var(--surface2);border-radius:2px;margin-top:7px;overflow:hidden}
 #fin-root .pbf{height:100%;border-radius:2px;background:var(--accent)}
-#fin-root .tc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:18px}
+#fin-root .tc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:18px}
 #fin-root table{width:100%;border-collapse:collapse;font-size:13px}
 #fin-root th{background:var(--surface);padding:9px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.3px;border-bottom:1px solid var(--border)}
 #fin-root td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
@@ -1980,6 +1980,34 @@ input[type="time"].task-input::-webkit-calendar-picker-indicator:hover { opacity
         <div class="learn-title">Шаблон анализа конкурентов</div>
         <div class="learn-desc">Google Таблица для систематического анализа 5 конкурентов на Авито: 8 блоков, автооценки, сводка, стратегия. Откроется в режиме «Создать копию».</div>
         <span class="learn-tag" style="background:var(--orange-dim);color:var(--orange);border-color:var(--orange-mid)">Создать копию →</span>
+      </div>
+    </a>
+
+    <div class="section-label">РЕГЛАМЕНТ РАБОТЫ</div>
+    <a href="https://docs.google.com/document/d/1wyDIeDiiFZnxySR2ESzq2gBFTFTENJPqslddiw3HLcU/edit?usp=sharing" target="_blank" style="text-decoration:none">
+      <div class="learn-card" style="margin-bottom:8px">
+        <div class="learn-icon" style="color:var(--orange)"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/><line x1="8" y1="9" x2="10" y2="9"/></svg></div>
+        <div class="learn-title">Авитолог · работа с аккаунтом</div>
+        <div class="learn-desc">Пошаговый алгоритм: от приёмки проекта до стабильного потока заявок. Единый для всех ниш, шаг за шагом.</div>
+        <span class="learn-tag" style="background:var(--blue-dim);color:var(--blue);border-color:#40c4ff30">Открыть →</span>
+      </div>
+    </a>
+
+    <div class="section-label">ОБРАТНАЯ СВЯЗЬ КЛИЕНТОВ</div>
+    <a href="https://docs.google.com/forms/d/e/1FAIpQLSdV2e8wY3i62NQun0u7eC3-ktJE_5rlDwRhez_8J24cIFnJNg/viewform" target="_blank" style="text-decoration:none">
+      <div class="learn-card" style="margin-bottom:8px">
+        <div class="learn-icon" style="color:var(--green)"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+        <div class="learn-title">Отзыв · планы на новый период</div>
+        <div class="learn-desc">Форма для действующих клиентов перед продлением — сверка ожиданий, оценка ПМ и авитолога. Отправляй клиенту.</div>
+        <span class="learn-tag" style="background:var(--green-dim);color:var(--green);border-color:var(--green-mid)">Открыть форму →</span>
+      </div>
+    </a>
+    <a href="https://docs.google.com/forms/d/e/1FAIpQLSc1a_kPdxRNxBfWe4w_jmHaEDgYiUnGCQ0qidNol2iPkRUtRA/viewform" target="_blank" style="text-decoration:none">
+      <div class="learn-card" style="margin-bottom:8px">
+        <div class="learn-icon" style="color:var(--green)"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+        <div class="learn-title">Отзыв · по итогам сотрудничества</div>
+        <div class="learn-desc">Форма для клиента, который завершает работу — причина ухода, что улучшить, NPS. Отправляй при офбординге.</div>
+        <span class="learn-tag" style="background:var(--green-dim);color:var(--green);border-color:var(--green-mid)">Открыть форму →</span>
       </div>
     </a>
 
