@@ -1050,11 +1050,29 @@ input[type="time"].task-input::-webkit-calendar-picker-indicator:hover { opacity
 .task-assignee {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 10px;
-  color: var(--dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .01em;
   min-width: 0;
+}
+.task-ava {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  font-size: 11px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.task-ava-letter {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 10px;
 }
 .task-actions {
   display: flex;
@@ -3741,11 +3759,7 @@ input[type="time"].task-input::-webkit-calendar-picker-indicator:hover { opacity
       </select>
       <select class="task-select" id="tf-assignee">
         <option value="">Исполнитель</option>
-        <option value="Микаэл">Микаэл</option>
-        <option value="Аня">Аня</option>
-        <option value="Арина">Арина</option>
-        <option value="Регина">Регина</option>
-        <option value="Даниил">Даниил</option>
+        <!-- Заполняется из TEAM_MEMBERS: список команды задан в одном месте -->
       </select>
     </div>
     <select class="task-select" id="tf-column">
@@ -4899,7 +4913,6 @@ const DEFAULT_BOARD_COLS = [
   { id: 'backlog',    title: 'В ПЛАНАХ',       color: '#7a7a82',  textColor: '#b0b0b8' },
   { id: 'inprogress', title: 'В РАБОТЕ',       color: '#ffab00',  textColor: '#ffab00' },
   { id: 'done',       title: 'ГОТОВО',         color: '#00e676',  textColor: '#00e676' },
-  { id: 'report',     title: 'ОТЧЁТ КЛИЕНТУ',  color: '#40c4ff',  textColor: '#40c4ff' },
 ];
 
 // Legacy default (for the "All tasks" combined view — same labels)
@@ -4928,18 +4941,49 @@ let currentBoardProject = null;   // when trackerView='board', which project
 let allProjects_fromSheets = [];
 
 // Team members — keep in sync with tf-assignee options
+// emoji — личный значок, тот же, что в Telegram-боте: человек узнаёт себя
+// в списке за долю секунды, не вчитываясь в имя.
+// aliases — как имя может быть записано в старых задачах. Благодаря им
+// «Даниил» и «Даня» — один человек, и переименование ничего не ломает.
 const TEAM_MEMBERS = [
-  { name: 'Микаэл', color: '#FF4D2E' },
-  { name: 'Аня',    color: '#b388ff' },
-  { name: 'Арина',  color: '#00e676' },
-  { name: 'Регина', color: '#40c4ff' },
-  { name: 'Даниил', color: '#ffab00' },
+  { name: 'Микаэл', emoji: '🦅', color: '#FF4D2E', aliases: [] },
+  { name: 'Даня',   emoji: '🐺', color: '#ffab00', aliases: ['Даниил', 'Данил'] },
+  { name: 'Аня',    emoji: '🦊', color: '#b388ff', aliases: ['Анна'] },
+  { name: 'Арина',  emoji: '🐬', color: '#00e676', aliases: [] },
+  { name: 'Регина', emoji: '👑', color: '#40c4ff', aliases: [] },
 ];
 
+/** Имя в сравнимый вид: без регистра, без краевых пробелов, ё→е. */
+function normPerson(s) {
+  return String(s == null ? '' : s).trim().toLowerCase().replace(/ё/g, 'е');
+}
+
+/** Находит человека по любому из его написаний. */
+function findPerson(name) {
+  const key = normPerson(name);
+  if (!key) return null;
+  return TEAM_MEMBERS.find(m =>
+    normPerson(m.name) === key || (m.aliases || []).some(a => normPerson(a) === key)
+  ) || null;
+}
+
 function getPersonColor(name) {
-  const p = TEAM_MEMBERS.find(m => m.name === name);
+  const p = findPerson(name);
   return p ? p.color : '#72727A';
 }
+
+/** Значок человека. Незнакомому имени — первая буква. */
+function personEmoji(name) {
+  const p = findPerson(name);
+  return p ? p.emoji : '';
+}
+
+/** Как показывать имя: приводим старые написания к нынешнему. */
+function personLabel(name) {
+  const p = findPerson(name);
+  return p ? p.name : (name || '');
+}
+
 function personInitial(name) {
   return (name || '?').trim().charAt(0).toUpperCase();
 }
@@ -4981,12 +5025,36 @@ function migrateColumnTitles(cols) {
   });
 }
 
-function ensureReportColumn(cols) {
-  // Add "Отчёт клиенту" column if missing (for legacy boards)
+// Колонка «ОТЧЁТ КЛИЕНТУ» убрана: она дублировала «ГОТОВО» и путала счёт.
+// Задача в ней считалась завершённой в одних местах и активной в других,
+// а при переносе из «ГОТОВО» ещё и теряла отметку времени завершения —
+// из-за чего вечерняя сводка занижала результат команды.
+const LEGACY_COL_REPORT = 'report';
+
+/** Убирает колонку из доски. Раньше эта функция её, наоборот, добавляла. */
+function dropReportColumn(cols) {
   if (!Array.isArray(cols)) return cols;
-  const hasReport = cols.some(c => c && c.id === 'report');
-  if (hasReport) return cols;
-  return [...cols, { id: 'report', title: 'ОТЧЁТ КЛИЕНТУ', color: '#40c4ff', textColor: '#40c4ff' }];
+  const cleaned = cols.filter(c => c && c.id !== LEGACY_COL_REPORT);
+  // Совсем без колонок доску не оставляем
+  return cleaned.length ? cleaned : cols;
+}
+
+/**
+ * Переносит задачи из удалённой колонки в «ГОТОВО».
+ * Без этого они остались бы в базе, но пропали бы с доски —
+ * колонки для них больше нет.
+ *
+ * Отметку времени завершения намеренно НЕ проставляем: задача была
+ * закрыта когда-то раньше, и пометить её сегодняшней значило бы
+ * приписать команде чужой результат.
+ */
+function migrateReportTasks() {
+  let moved = 0;
+  tasks.forEach(t => {
+    if (t && t.colId === LEGACY_COL_REPORT) { t.colId = 'done'; moved++; }
+  });
+  if (moved) console.log(`Перенесено из «Отчёт клиенту» в «Готово»: ${moved}`);
+  return moved;
 }
 
 function loadTaskData() {
@@ -4994,14 +5062,14 @@ function loadTaskData() {
     const savedCols = localStorage.getItem(COL_STORAGE_KEY);
     taskCols = savedCols ? JSON.parse(savedCols) : [...DEFAULT_COLS];
     taskCols = migrateColumnTitles(taskCols);
-    taskCols = ensureReportColumn(taskCols);
+    taskCols = dropReportColumn(taskCols);
   } catch(e) { taskCols = [...DEFAULT_COLS]; }
   try {
     const savedBoards = localStorage.getItem(BOARDS_STORAGE_KEY);
     projectBoards = savedBoards ? JSON.parse(savedBoards) : {};
     Object.keys(projectBoards).forEach(k => {
       projectBoards[k] = migrateColumnTitles(projectBoards[k]);
-      projectBoards[k] = ensureReportColumn(projectBoards[k]);
+      projectBoards[k] = dropReportColumn(projectBoards[k]);
     });
   } catch(e) { projectBoards = {}; }
 }
@@ -5039,6 +5107,13 @@ function attachFirebaseListener() {
     const data = snapshot.val();
     tasks = data ? Object.values(data) : [];
     window._fbTasksLoaded = true; // первый снимок получен — теперь писать безопасно
+
+    // Разовый перенос из упразднённой колонки. Сохраняем только если
+    // что-то реально переехало — лишних записей в базу не делаем.
+    // Порядок важен: строго ПОСЛЕ _fbTasksLoaded, иначе запись
+    // не пройдёт защиту от затирания задач пустым списком.
+    if (migrateReportTasks()) saveTaskData();
+
     rerenderCurrentTrackerView();
     rerenderProjectsList();
   }, (err) => console.error('FB read error:', err));
@@ -5050,10 +5125,10 @@ function attachFirebaseListener() {
       const data = snapshot.val();
       if (data) {
         projectBoards = data;
-        // Migrate any legacy "БЭКЛОГ" titles + ensure Отчёт клиенту column
+        // Чиним старые заголовки и убираем упразднённую колонку «Отчёт клиенту»
         Object.keys(projectBoards).forEach(k => {
           projectBoards[k] = migrateColumnTitles(projectBoards[k]);
-          projectBoards[k] = ensureReportColumn(projectBoards[k]);
+          projectBoards[k] = dropReportColumn(projectBoards[k]);
         });
         localStorage.setItem(BOARDS_STORAGE_KEY, JSON.stringify(projectBoards));
         rerenderCurrentTrackerView();
@@ -5572,7 +5647,18 @@ function renderTaskCard(t) {
     ? `<div class="task-project-tag" style="background:${c.bg};color:${c.color};border:1px solid ${c.border}">${t.project}</div>`
     : '';
   const desc = t.desc ? `<div class="task-desc">${t.desc}</div>` : '';
-  const assignee = t.assignee ? `<span class="task-assignee"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px;margin-right:4px"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> ${t.assignee}</span>` : '';
+  // Исполнитель: значок в кружке его цвета + имя. Раньше тут был серый
+  // безликий силуэт мелким шрифтом — на доске из двадцати карточек глаз
+  // за него не цеплялся, и понять «где мои задачи» было тяжело.
+  const assignee = t.assignee ? (() => {
+    const c = getPersonColor(t.assignee);
+    const em = personEmoji(t.assignee);
+    const nm = escapeHtml(personLabel(t.assignee));
+    const face = em
+      ? `<span class="task-ava" style="background:${c}22;border-color:${c}55">${em}</span>`
+      : `<span class="task-ava task-ava-letter" style="background:${c}22;border-color:${c}55;color:${c}">${escapeHtml(personInitial(t.assignee))}</span>`;
+    return `<span class="task-assignee" style="color:${c}">${face}${nm}</span>`;
+  })() : '';
   const deadline = renderDeadlineBadge(t.deadline, t.colId, t.deadlineTime);
   // Show assignee + deadline together; if neither, keep flex spacing
   const leftBlock = (assignee || deadline)
@@ -5855,6 +5941,12 @@ function openTaskForm(colId, taskId, prefilledProject) {
   const titleEl = document.getElementById('tf-title');
   const descEl  = document.getElementById('tf-desc');
   const asgEl   = document.getElementById('tf-assignee');
+  // Список исполнителей строим из TEAM_MEMBERS, чтобы он не разъезжался
+  // с остальным приложением при добавлении человека.
+  if (asgEl && asgEl.options.length <= 1) {
+    asgEl.innerHTML = '<option value="">Исполнитель</option>' +
+      TEAM_MEMBERS.map(m => `<option value="${m.name}">${m.emoji} ${m.name}</option>`).join('');
+  }
   const sel     = document.getElementById('tf-project');
 
   populateColSelect(addingToColId, formCols);
@@ -6057,7 +6149,8 @@ function FIN_ROOT(){ return document.getElementById('fin-root') || document; }
 // ═══════════════════════════════════════════════════
 const MONTHS_RU = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const SCHEMES = ['Предоплата','50/50','Постоплата'];
-const STATUSES = ['Оплачено','Половина','Ожидается','Ушёл'];
+// Порядок — по ходу денег, тот же, что при клике по значку статуса.
+const STATUSES = ['Ожидается','Половина','Оплачено','Ушёл'];
 const ART_IN = ['Ретейнер','Разовый','Консультация','Прочее'];
 const ART_OUT = ['Зарплата','Маркетинг','Сервисы','Налоги','Личное','Прочее'];
 const TAX_RATE = 0.08;
@@ -6077,6 +6170,52 @@ function daysBetween(dmy){ if(!dmy) return null; const p=String(dmy).split('.');
   const d=new Date(+p[2],+p[1]-1,+p[0]); d.setHours(0,0,0,0); const n=new Date(); const t=new Date(n.getFullYear(),n.getMonth(),n.getDate());
   return Math.round((d-t)/86400000); }
 function todayDMY(){ const n=new Date(); return pad2(n.getDate())+'.'+pad2(n.getMonth()+1)+'.'+n.getFullYear(); }
+
+// ── Платёжные даты: шаг и автосдвиг ──────────────────────────
+// Раньше «следующая оплата» двигалась только руками, и её не двигали:
+// в июле шесть потоков из четырнадцати показывали отрицательный счётчик
+// при статусе «Оплачено». На таких данных нельзя строить ни рассылку
+// команде, ни собственные решения.
+
+function parseDMY(dmy){ if(!dmy) return null; const p=String(dmy).split('.'); if(p.length<3) return null;
+  const d=new Date(+p[2],+p[1]-1,+p[0]); return isNaN(d)?null:d; }
+function fmtDMY(d){ return pad2(d.getDate())+'.'+pad2(d.getMonth()+1)+'.'+d.getFullYear(); }
+function addDaysDMY(dmy,days){ const d=parseDMY(dmy); if(!d) return dmy||''; d.setDate(d.getDate()+days); return fmtDMY(d); }
+
+// Шаг платежей потока в днях = «следующая минус прошлая».
+// Берём из самой записи, а не выводим из схемы оплаты: у Эдуарда
+// постоплата с шагом 14 дней, у Артема предоплата с шагом 30,
+// у Николая предоплата на 153 дня вперёд. Схема и длина периода —
+// разные вещи, по первой вторую не угадать.
+function streamStep(s){
+  const a=parseDMY(s&&s.lastDate), b=parseDMY(s&&s.nextDate);
+  if(a&&b){ const d=Math.round((b-a)/86400000); if(d>=5&&d<=400) return d; }
+  // Запасной вариант: у нового клиента прошлой даты ещё нет,
+  // а после переноса месяца обе даты могут совпасть.
+  const half=String((s&&s.scheme)||'')==='50/50'||String((s&&s.status)||'')==='Половина';
+  return half?14:30;
+}
+
+// dir=+1 — оплата пришла: прошлая ← бывшая следующая, следующая ← плюс шаг.
+// dir=-1 — откат ошибочной отметки, ровно наоборот.
+function shiftStreamDates(s,dir){
+  const step=streamStep(s);
+  if(dir>0){ const last=s.nextDate||s.lastDate||''; return {lastDate:last,nextDate:addDaysDMY(last,step)}; }
+  const next=s.lastDate||s.nextDate||''; return {lastDate:addDaysDMY(next,-step),nextDate:next};
+}
+
+// «Половина» — тоже приход денег: у схемы 50/50 после первой половины
+// ждём вторую через две недели.
+const PAID_STATES=['Оплачено','Половина'];
+
+// Что поменять в датах при смене статуса. Откат обязателен: без него
+// один промах мышью навсегда сдвигает клиента, а заметишь через месяц.
+function datesOnStatusChange(s,nextStatus){
+  const wasPaid=PAID_STATES.includes(s.status), willPay=PAID_STATES.includes(nextStatus);
+  if(!wasPaid&&willPay) return shiftStreamDates(s,+1);
+  if(wasPaid&&!willPay) return shiftStreamDates(s,-1);
+  return {};   // Оплачено↔Половина — уточнение суммы. Ожидается↔Ушёл — денег не было.
+}
 
 // ═══════════════════════════════════════════════════
 // SEED (июнь 2026, реальные данные, детерминированные id)
@@ -6248,7 +6387,13 @@ function createNextMonth(){
   // переносим потоки со сбросом оплат, копируем зарплаты, чистим ленты
   const ns={};
   (m?Object.keys(m.streams||{}):[]).forEach(id=>{ const s=m.streams[id];
-    ns[id]=Object.assign({}, s, { lastDate:s.nextDate||'', status:'Ожидается', paid:0, debt:num(s.tariff) }); });
+    const last=s.nextDate||s.lastDate||'';
+    ns[id]=Object.assign({}, s, {
+      lastDate:last,
+      // Раньше следующая дата копировалась как есть — в новом месяце обе
+      // даты совпадали, и счётчик «дней до» ломался сразу у всех потоков.
+      nextDate:addDaysDMY(last, streamStep(s)),
+      status:'Ожидается', paid:0, debt:num(s.tariff) }); });
   const nsal={}; (m?Object.keys(m.salaries||{}):[]).forEach(id=>{ nsal[id]=Object.assign({}, m.salaries[id], {status:'Ожидается'}); });
   const newMonth={ key:k, year:ny, month:nm, streams:ns, ops:{}, expenses:{}, salaries:nsal, cash:(m&&m.cash)?JSON.parse(JSON.stringify(m.cash)):{cashNow:0,services:7500,other:0,plan:{}} };
   if(fbOk()) window._fbUpdate(fref(), { ['months/'+k]: newMonth }).catch(e=>console.error(e));
@@ -6363,12 +6508,29 @@ function editStream(id,field,val,kind){
 }
 function cycleStatus(id){
   const m=curM(); if(!m||!m.streams[id]) return; const s=m.streams[id];
-  const order=['Оплачено','Половина','Ожидается','Ушёл']; const next=order[(order.indexOf(s.status)+1)%order.length];
-  const upd=Object.assign({},s,{status:next});
-  if(next==='Оплачено'){ upd.paid=num(s.tariff); upd.debt=0; addAutoOp(s,num(s.tariff)); }
-  else if(next==='Половина'){ const half=Math.round(num(s.tariff)/2); upd.paid=half; upd.debt=num(s.tariff)-half; addAutoOp(s,half); }
+  // Порядок повторяет ход денег: ждём → пришла половина → пришло всё → ушёл.
+  // Раньше он начинался с «Оплачено», и чтобы отметить половину, приходилось
+  // проходить через «Ушёл» и «Оплачено» — а каждый такой проход записывал
+  // в «Операции» лишний приход на весь тариф.
+  const order=['Ожидается','Половина','Оплачено','Ушёл'];
+  const i=order.indexOf(s.status);
+  const next=order[(i<0?0:i+1)%order.length];
+
+  // Даты платежей двигаются вместе со статусом — и откатываются, если
+  // статус вернули обратно. Полный круг статусов дрейфа не даёт.
+  const upd=Object.assign({},s,{status:next},datesOnStatusChange(s,next));
+
+  const wasPaid=num(s.paid);
+  if(next==='Оплачено'){ upd.paid=num(s.tariff); upd.debt=0; }
+  else if(next==='Половина'){ const half=Math.round(num(s.tariff)/2); upd.paid=half; upd.debt=num(s.tariff)-half; }
   else if(next==='Ожидается'){ upd.paid=0; upd.debt=num(s.tariff); }
   else if(next==='Ушёл'){ upd.debt=0; } // долг обнуляется, оплаченное остаётся
+
+  // В ленту операций пишем РАЗНИЦУ — сколько денег реально пришло этим
+  // кликом, а не всю сумму заново. Иначе у схемы 50/50 вторая половина
+  // записывалась как полный тариф, и приход задваивался.
+  addAutoOp(s, num(upd.paid)-wasPaid);
+
   writeItem('streams', id, upd);
 }
 function addAutoOp(s, sum){ if(sum<=0) return; const id=mkId(); writeItem('ops', id, {date:todayDMY(), cp:s.client+' / '+s.stream, sum, kind:'Регулярный', art:'Ретейнер', note:'авто'}); }
