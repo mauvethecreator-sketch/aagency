@@ -1507,7 +1507,49 @@ input[type="time"].task-input::-webkit-calendar-picker-indicator:hover { opacity
 .pcard.paused::before { background: var(--muted); }
 .pcard-body { padding: 13px 14px 11px 17px; flex: 1; }
 .pcard-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.pcard-niche { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 1.3px; color: var(--accent-color, var(--orange)); text-transform: uppercase; font-weight: 600; }
+/* Ниша — плашка в цвете проекта. Раньше это была бледная надпись
+   мельче всего остального: на сетке из пятнадцати карточек взгляд
+   цеплялся за что угодно, только не за неё. */
+.pcard-niche {
+  display: inline-block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; letter-spacing: 1.2px; font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent-color, var(--orange));
+  background: var(--accent-bg, transparent);
+  border: 0.5px solid var(--accent-border, transparent);
+  border-radius: 5px;
+  padding: 3px 7px;
+}
+
+/* Исполнитель — значок в кружке его цвета плюс имя. Главный вопрос
+   к этой карточке был «кто ведёт», и ответ должен читаться сразу. */
+.pcard-who { display: flex; align-items: center; gap: 7px; margin-top: 11px; }
+.pcard-ava {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid transparent; font-size: 14px; line-height: 1; flex-shrink: 0;
+}
+.pcard-ava-letter { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 12px; }
+.pcard-who-text { min-width: 0; }
+.pcard-who-name { font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700; line-height: 1.15; }
+.pcard-who-role { font-family: 'IBM Plex Mono', monospace; font-size: 8px; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; font-weight: 600; }
+
+/* Строка оплаты. Цветом показываем срочность, суммы тут не бывает
+   никогда — карточки видит вся команда. */
+.pcard-pay {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 9px; padding: 6px 8px; border-radius: 7px;
+  font-family: 'IBM Plex Mono', monospace; font-size: 10.5px;
+  background: #ffffff08; border: 0.5px solid var(--border);
+  color: var(--dim);
+}
+.pcard-pay strong { font-family: 'Space Grotesk', sans-serif; font-size: 12px; font-weight: 700; color: var(--text); }
+.pcard-pay.soon  { background: #ffab0014; border-color: #ffab0035; color: var(--amber); }
+.pcard-pay.soon strong { color: var(--amber); }
+.pcard-pay.over  { background: #ff444414; border-color: #ff444435; color: var(--red); }
+.pcard-pay.over strong { color: var(--red); }
+.pcard-pay svg { flex-shrink: 0; opacity: .75; }
 .pcard-name { font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 700; letter-spacing: -0.3px; color: var(--text); line-height: 1.15; margin-top: 3px; word-break: break-word; }
 .pcard-meta { display: flex; gap: 14px; margin-top: 9px; flex-wrap: wrap; }
 .pcard-meta-item { min-width: 0; }
@@ -4186,8 +4228,28 @@ function statusToCode(s) {
   return 'pause';
 }
 
+/** Значение ячейки без пустышек вроде «—» и «-». */
+/** Склонение числительных: 1 день / 2 дня / 5 дней. */
+function plural3(n, one, few, many) {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+  return many;
+}
+
+function cleanCell(v) {
+  const s = String(v == null ? '' : v).trim();
+  return (s === '—' || s === '-' || s === '–') ? '' : s;
+}
+
 function parseRow(row) {
-  // row[0]=№, row[1]=Клиент/Ниша, row[2]=Статус, row[3]=Авитолог, row[4]=KPI, row[5]=Воркбук, row[6]=Коммент
+  // Колонки таблицы «Проекты»:
+  //   0 №  1 Клиент/Ниша  2 Статус  3 Авитолог  4 KPI
+  //   5 Воркбук  6 Период  7 Дата обновления  8 Коммент
+  //
+  // Период и дату обновления добавили в таблицу позже, а код продолжал
+  // читать шестую колонку как комментарий — из-за этого на карточках
+  // период KPI показывался со значком предупреждения, будто это замечание.
   const fullName = (row[1] || '').trim();
   // Split by any common separator: / \ | — – -
   // (but only if it's surrounded by spaces or one side is a space — to avoid splitting hyphenated words)
@@ -4209,7 +4271,9 @@ function parseRow(row) {
     specialist: (row[3] || '').trim(),
     kpi: (row[4] || '').trim(),
     workbook: (row[5] || '').trim(),
-    comment: (row[6] || '').trim(),
+    period: cleanCell(row[6]),
+    updatedAt: cleanCell(row[7]),
+    comment: cleanCell(row[8]),
     rotation: '—',
     ads: '—',
   };
@@ -4297,6 +4361,40 @@ function projectCard(p, i) {
   const statsHtml = `<div class="pcard-stats">${stripParts.length ? stripParts.join('') : '<span class="pcard-stat" style="opacity:0.55">нет задач</span>'}</div>`;
 
   const accent = colorForString(p.niche || p.name || '');
+
+  // ── Кто ведёт проект ──
+  const spec = p.specialist || '';
+  const specColor = spec ? getPersonColor(spec) : '#72727A';
+  const specEmoji = spec ? personEmoji(spec) : '';
+  const whoFace = spec
+    ? (specEmoji
+        ? `<span class="pcard-ava" style="background:${specColor}22;border-color:${specColor}55">${specEmoji}</span>`
+        : `<span class="pcard-ava pcard-ava-letter" style="background:${specColor}22;border-color:${specColor}55;color:${specColor}">${escapeHtml(personInitial(spec))}</span>`)
+    : `<span class="pcard-ava pcard-ava-letter" style="background:#ffffff0a;border-color:var(--border);color:var(--muted)">?</span>`;
+  const whoHtml = `
+        <div class="pcard-who">
+          ${whoFace}
+          <div class="pcard-who-text">
+            <div class="pcard-who-role">Авитолог</div>
+            <div class="pcard-who-name" style="color:${spec ? specColor : 'var(--muted)'}">${escapeHtml(spec ? personLabel(spec) : 'не назначен')}</div>
+          </div>
+        </div>`;
+
+  // ── До какой даты оплачен ──
+  // Берём из раздела финансов по имени клиента. Показываем ТОЛЬКО срок:
+  // сумм и долгов тут нет и быть не должно — карточки видит вся команда.
+  const pay = (window.FIN && FIN.paidUntil) ? FIN.paidUntil(p.name, p.niche) : null;
+  const payHtml = pay ? (() => {
+    const cls = pay.days < 0 ? 'over' : pay.days <= 5 ? 'soon' : '';
+    const when = pay.days < 0
+      ? `просрочено на ${Math.abs(pay.days)} ${plural3(Math.abs(pay.days), 'день', 'дня', 'дней')}`
+      : pay.days === 0 ? 'сегодня'
+      : `через ${pay.days} ${plural3(pay.days, 'день', 'дня', 'дней')}`;
+    return `<div class="pcard-pay ${cls}">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Оплачен до <strong>${escapeHtml(pay.date)}</strong> · ${when}
+    </div>`;
+  })() : '';
   const commentHtml = hasComment
     ? `<div class="pcard-comment"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>${escapeHtml(p.comment)}</div>`
     : '';
@@ -4311,16 +4409,18 @@ function projectCard(p, i) {
           ${statusBadges[p.status] || ''}
         </div>
         <div class="pcard-name">${escapeHtml(p.name)}</div>
+        ${whoHtml}
         <div class="pcard-meta">
-          <div class="pcard-meta-item">
-            <div class="pcard-meta-label">Специалист</div>
-            <div class="pcard-meta-val ${p.specialist ? 'ok' : ''}">${escapeHtml(p.specialist || '—')}</div>
-          </div>
           <div class="pcard-meta-item">
             <div class="pcard-meta-label">KPI</div>
             <div class="pcard-meta-val ${hasKpi ? 'ok' : ''}">${escapeHtml(p.kpi || '—')}</div>
           </div>
+          ${p.period ? `<div class="pcard-meta-item">
+            <div class="pcard-meta-label">Период KPI</div>
+            <div class="pcard-meta-val ok">${escapeHtml(p.period)}</div>
+          </div>` : ''}
         </div>
+        ${payHtml}
         ${commentHtml}
         ${statsHtml}
       </div>
@@ -4837,6 +4937,18 @@ function closeLearn() {
 }
 
 // ── INIT ──────────────────────────────────────
+
+// Карточкам проектов нужны сроки оплат, поэтому данные финансов
+// подтягиваем сразу, не дожидаясь входа в раздел. Сам раздел
+// по-прежнему за пин-кодом — сюда попадают только даты, без сумм.
+setTimeout(() => { try { window.FIN && FIN.preload && FIN.preload(); } catch(e) { console.error('FIN preload:', e); } }, 0);
+
+// Даты приезжают отдельно от таблицы проектов, поэтому карточки
+// перерисовываем, когда они пришли.
+window.addEventListener('finance-updated', () => {
+  try { rerenderProjectsList(); } catch(e) { console.error('Обновление карточек:', e); }
+});
+
 renderProjects();
 calcModel(); // async — loads from Google Sheets
 // Start task tracker in background so we have task counts on the projects page
@@ -6167,6 +6279,9 @@ function mkId(){ return 'f'+Date.now().toString(36)+Math.random().toString(36).s
 function toISO(dmy){ if(!dmy) return ''; const p=String(dmy).split('.'); return p.length<3?'':`${p[2]}-${p[1]}-${p[0]}`; }
 function fromISO(iso){ if(!iso) return ''; const p=String(iso).split('-'); return p.length<3?'':`${p[2]}.${p[1]}.${p[0]}`; }
 function daysBetween(dmy){ if(!dmy) return null; const p=String(dmy).split('.'); if(p.length<3) return null;
+  // Битую дату (например, недобранный год 0002) показываем как «нет даты»,
+  // а не как «просрочка 739 000 дней».
+  if(!plausibleYear(+p[2])) return null;
   const d=new Date(+p[2],+p[1]-1,+p[0]); d.setHours(0,0,0,0); const n=new Date(); const t=new Date(n.getFullYear(),n.getMonth(),n.getDate());
   return Math.round((d-t)/86400000); }
 function todayDMY(){ const n=new Date(); return pad2(n.getDate())+'.'+pad2(n.getMonth()+1)+'.'+n.getFullYear(); }
@@ -6177,7 +6292,15 @@ function todayDMY(){ const n=new Date(); return pad2(n.getDate())+'.'+pad2(n.get
 // при статусе «Оплачено». На таких данных нельзя строить ни рассылку
 // команде, ни собственные решения.
 
+// Правдоподобный ли год. Поле <input type="date"> считает дату готовой уже
+// после первой цифры года: наберёшь «2» — получится 0002, и это формально
+// корректная дата. Такие «даты» надо отсекать, иначе они улетают в базу
+// прямо посреди набора.
+function plausibleYear(y){ return y>=2000 && y<=2100; }
+function plausibleISO(iso){ return plausibleYear(+String(iso||'').slice(0,4)); }
+
 function parseDMY(dmy){ if(!dmy) return null; const p=String(dmy).split('.'); if(p.length<3) return null;
+  if(!plausibleYear(+p[2])) return null;
   const d=new Date(+p[2],+p[1]-1,+p[0]); return isNaN(d)?null:d; }
 function fmtDMY(d){ return pad2(d.getDate())+'.'+pad2(d.getMonth()+1)+'.'+d.getFullYear(); }
 function addDaysDMY(dmy,days){ const d=parseDMY(dmy); if(!d) return dmy||''; d.setDate(d.getDate()+days); return fmtDMY(d); }
@@ -6326,7 +6449,9 @@ function attach(){
       const sm=seedMonth();
       window._fbUpdate(fref(), { seeded:true, ['months/'+sm.key]: sm }).catch(e=>console.error('FIN seed',e));
     }
-    if(document.getElementById('page-owner') && document.getElementById('page-owner').classList.contains('active')) renderCurrent();
+    if(document.getElementById('page-owner') && document.getElementById('page-owner').classList.contains('active')) renderCurrentSafe();
+    // Карточкам проектов нужны даты оплат — сообщаем, что они приехали
+    try { window.dispatchEvent(new Event('finance-updated')); } catch(e){}
   }, (err)=>console.error('FIN read',err));
 }
 
@@ -6403,6 +6528,31 @@ function createNextMonth(){
 // ═══════════════════════════════════════════════════
 // RENDER DISPATCH
 // ═══════════════════════════════════════════════════
+// ── Перерисовка, не мешающая набору ──────────────────────────
+// renderCurrent пересобирает разметку раздела целиком. Если сделать это,
+// пока человек печатает, поле пересоздаётся и ввод сбивается на полуслове.
+// Ровно поэтому не набирался год: каждая цифра улетала в базу, прилетала
+// обратно и затирала поле. Ждём, пока человек выйдет из поля.
+let finRenderPending=false;
+
+function isEditingFinance(){
+  const el=document.activeElement; if(!el) return false;
+  if(!/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return false;
+  const root=document.getElementById('fin-root');
+  return !!(root && root.contains(el));
+}
+
+function renderCurrentSafe(){
+  if(isEditingFinance()){ finRenderPending=true; return; }
+  renderCurrent();
+}
+
+document.addEventListener('focusout', ()=>{
+  if(!finRenderPending) return;
+  // Даём браузеру перевести фокус, прежде чем решать
+  setTimeout(()=>{ if(!isEditingFinance()){ finRenderPending=false; renderCurrent(); } }, 0);
+});
+
 function renderCurrent(){
   updateMonthNav();
   if(!financeLoaded){ const ov=document.getElementById('f_ov-cards'); if(ov) ov.innerHTML='<div style="padding:24px;color:var(--text3)">Загрузка…</div>'; return; }
@@ -6503,6 +6653,8 @@ function renderClients(){
 }
 function editStream(id,field,val,kind){
   const m=curM(); if(!m||!m.streams[id]) return;
+  // Год ещё не дописан — человек в процессе набора, сохранять нечего
+  if(kind==='date' && val && !plausibleISO(val)) return;
   let v = kind==='date' ? fromISO(val) : (field==='tariff'||field==='debt'||field==='paid')?num(val):val;
   writeItem('streams', id, Object.assign({}, m.streams[id], {[field]:v}));
 }
@@ -6554,6 +6706,7 @@ function renderSalaries(){
   document.getElementById('f_sal-tf').innerHTML=`<strong>Фонд оплаты / мес: ${fmtR(fot)}</strong>`;
 }
 function editSal(id,field,val,kind){ const m=curM(); if(!m||!m.salaries[id]) return;
+  if(kind==='date' && val && !plausibleISO(val)) return;
   let v=kind==='date'?fromISO(val):(field==='base'||field==='bonus')?num(val):val;
   writeItem('salaries', id, Object.assign({}, m.salaries[id], {[field]:v})); if(field==='base'||field==='bonus') setTimeout(renderSalaries,50); }
 function cycleSalStatus(id){ const m=curM(); if(!m||!m.salaries[id]) return; const s=m.salaries[id];
@@ -6705,6 +6858,64 @@ var API={ init:function(){
   if(fbOk()) attach(); else window.addEventListener('firebase-ready', ()=>attach(), {once:true});
   renderCurrent();
 } };
+// ── Даты оплат наружу, для карточек проектов ─────────────────
+// Команде нужны СРОКИ, а не деньги: сумм, долгов и статусов оплаты
+// эта часть не отдаёт принципиально. Кто сколько платит — разговор
+// владельца с клиентом, и утечка тут стоит дорого.
+
+// Тихо подключаем данные финансов, не рисуя раздел: карточкам проектов
+// нужны только даты, а сам раздел по-прежнему за пин-кодом.
+API.preload=function(){
+  if(!API._done){ API._done=true; currentYear=2026; currentMonth=5; }
+  if(fbOk()) attach(); else window.addEventListener('firebase-ready', ()=>attach(), {once:true});
+};
+
+// Месяц, по которому считаем: текущий календарный, если он заведён,
+// иначе последний имеющийся. Не полагаемся на то, какой месяц открыт
+// в интерфейсе — там владелец мог листать историю.
+function actualMonth(){
+  const ks=Object.keys(db.months||{}).sort();
+  if(!ks.length) return null;
+  const n=new Date(), k=monthKey(n.getFullYear(), n.getMonth());
+  return db.months[k] || db.months[ks[ks.length-1]];
+}
+
+/** Похожи ли названия ниши и потока: «Стоматология» и «Стоматолог» — да. */
+function nicheLike(a,b){
+  const A=normPerson(a).replace(/[^a-zа-я0-9]/g,''), B=normPerson(b).replace(/[^a-zа-я0-9]/g,'');
+  if(!A||!B) return false;
+  if(A===B||A.startsWith(B)||B.startsWith(A)) return true;
+  return A.slice(0,5)===B.slice(0,5) && A.length>=5 && B.length>=5;
+}
+
+/**
+ * До какой даты оплачен проект. null, если сопоставить не удалось.
+ *
+ * Сначала ищем поток с похожим названием, и только если у клиента
+ * поток ровно один — берём его без оглядки на название.
+ *
+ * Когда потоков несколько и ни один не совпал по названию, честнее
+ * не показать ничего: у «Артема» есть и стоматология, и заборы,
+ * и подставить туда ближайшую дату значило бы соврать.
+ */
+API.paidUntil=function(client, niche){
+  const m=actualMonth(); if(!m||!m.streams) return null;
+  const key=normPerson(client); if(!key) return null;
+
+  const mine=Object.values(m.streams).filter(s=>s && normPerson(s.client)===key);
+  if(!mine.length) return null;
+
+  const pick = mine.length===1
+    ? mine[0]
+    : mine.find(s=>nicheLike(niche, s.stream));
+  if(!pick) return null;
+
+  const d=daysBetween(pick.nextDate);
+  if(d===null) return null;                    // битую дату не показываем
+  return { date:pick.nextDate, days:d, status:pick.status||'' };
+};
+API.financeReady=function(){ return financeLoaded; };
+
 API.goTo=goTo; API.prevMonth=prevMonth; API.nextMonth=nextMonth; API.createNextMonth=createNextMonth;
 API.openModal=openModal; API.closeModal=closeModal; API.saveModal=saveModal;
 API.fOps=fOps; API.delOp=delOp;
